@@ -54,19 +54,21 @@ candidate conveys the same key facts/figures as the gold answer, even if worded 
 differently. Minor extra detail is fine; contradictions or missing key facts are not."""
 
 
-def judge_faithfulness(question, answer, context) -> Faithfulness:
+def judge_faithfulness(question, answer, context, model=None) -> Faithfulness:
     return llm.generate_structured(
         _FAITH_SYSTEM,
         f"Question: {question}\n\nContext:\n{context}\n\nAnswer:\n{answer}",
         schema=Faithfulness,
+        model=model,
     )
 
 
-def judge_correctness(question, answer, gold) -> Correctness:
+def judge_correctness(question, answer, gold, model=None) -> Correctness:
     return llm.generate_structured(
         _CORRECT_SYSTEM,
         f"Question: {question}\n\nGold answer: {gold}\n\nCandidate answer: {answer}",
         schema=Correctness,
+        model=model,
     )
 
 
@@ -104,6 +106,11 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=config.TOP_K)
     ap.add_argument("--out", default="results.json")
     ap.add_argument("--limit", type=int, default=0, help="evaluate only first N (0=all)")
+    # Optional per-call-type models. Spreading answer + the two judges across
+    # different models keeps each under the free tier's 20-requests/day/model cap.
+    ap.add_argument("--answer-model", default=None)
+    ap.add_argument("--faith-model", default=None)
+    ap.add_argument("--correct-model", default=None)
     args = ap.parse_args()
 
     qpath = Path(args.questions)
@@ -129,7 +136,7 @@ def main() -> None:
 
     for i, row in enumerate(rows, 1):
         try:
-            result = rag.answer(row["question"], top_k=args.k)
+            result = rag.answer(row["question"], top_k=args.k, model=args.answer_model)
             hits = index.query(row["question"], top_k=args.k)  # same retrieval, ids included
 
             rm = retrieval_metrics(
@@ -137,8 +144,9 @@ def main() -> None:
                 row.get("gold_ticker", ""), row.get("gold_section", ""), args.k,
             )
             context = "\n\n".join(f"[{s.n}] {s.text}" for s in result.sources)
-            faith = judge_faithfulness(row["question"], result.answer, context)
-            correct = judge_correctness(row["question"], result.answer, row["gold_answer"])
+            faith = judge_faithfulness(row["question"], result.answer, context, model=args.faith_model)
+            correct = judge_correctness(row["question"], result.answer, row["gold_answer"],
+                                        model=args.correct_model)
         except Exception as e:  # don't let one bad call (e.g. quota) sink the run
             failed += 1
             print(f"  [{i}/{len(rows)}] {row['id']}  SKIPPED: {repr(e)[:120]}")
