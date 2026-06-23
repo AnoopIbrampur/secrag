@@ -1,0 +1,10 @@
+services:
+  secrag:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANSWER_MODEL=${ANSWER_MODEL:-gemini-2.5-flash-lite}
+      - JUDGE_MODEL=${JUDGE_MODEL:-gemini-2.5-flash-lite}
+    restart: unless-stopped

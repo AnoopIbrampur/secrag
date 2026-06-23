@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.env
+data/filings/
+eval/results.json
+eval/*.candidates.jsonl
+.pytest_cache/
+.DS_Store

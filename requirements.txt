@@ -1,0 +1,26 @@
+# --- Ingestion ---
+requests>=2.32
+
+# --- Chunking / parsing ---
+beautifulsoup4>=4.12       # strip HTML from EDGAR filings
+lxml>=5.0
+
+# --- Embeddings (local, no API key) ---
+sentence-transformers>=3.0 # pulls torch; runs bge-small locally
+
+# --- Vector store ---
+chromadb>=0.5
+
+# --- Generation (Google Gemini, free tier) ---
+google-genai>=1.0
+
+# --- API + frontend serving ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.0
+
+# --- Eval / utilities ---
+numpy>=1.26
+matplotlib>=3.8      # eval results figure
+python-dotenv>=1.0
+pytest>=8.0          # unit tests

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>secrag — SEC 10-K Q&A</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --fg:#e6e8eb; --muted:#9aa0aa; --accent:#4f9cf9; --border:#2a2e37; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width:780px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:1.5rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; font-size:.9rem; }
+  .row { display:flex; gap:8px; }
+  input[type=text] { flex:1; padding:12px 14px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--fg); font-size:1rem; }
+  input[type=text].small { flex:0 0 110px; }
+  button { padding:12px 18px; border-radius:8px; border:0; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .answer { margin-top:24px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; line-height:1.55; white-space:pre-wrap; }
+  .sources { margin-top:16px; }
+  .src { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:.86rem; }
+  .src a { color:var(--accent); text-decoration:none; }
+  .src .meta { color:var(--muted); }
+  .src .snippet { margin-top:6px; color:#c4c8ce; }
+  .latency { color:var(--muted); font-size:.8rem; margin-top:14px; }
+  .err { color:#ff6b6b; margin-top:16px; }
+  .examples { margin-top:10px; font-size:.82rem; color:var(--muted); }
+  .examples a { color:var(--accent); cursor:pointer; text-decoration:underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SEC 10-K Q&amp;A</h1>
+  <p class="sub">Retrieval-augmented answers grounded in real 10-K filings, with citations.</p>
+
+  <div class="row">
+    <input id="q" type="text" placeholder="Ask about a 10-K filing…" />
+    <input id="ticker" class="small" type="text" placeholder="Ticker (opt)" />
+    <button id="go">Ask</button>
+  </div>
+  <div class="examples">
+    Try:
+    <a data-q="What are NVIDIA's main competitive risks?">NVIDIA competitive risks</a> ·
+    <a data-q="How much did Apple spend on research and development?">Apple R&amp;D spend</a> ·
+    <a data-q="What does JPMorgan say about credit loss allowances?">JPMorgan credit losses</a>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function ask() {
+  const question = $("q").value.trim();
+  const ticker = $("ticker").value.trim();
+  if (question.length < 3) return;
+  $("go").disabled = true;
+  $("out").innerHTML = '<div class="latency">Thinking…</div>';
+
+  try {
+    const res = await fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, ticker: ticker || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Request failed");
+    render(data);
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">${e.message}</div>`;
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+function render(data) {
+  let html = `<div class="answer">${escapeHtml(data.answer)}</div>`;
+  if (data.sources && data.sources.length) {
+    html += '<div class="sources">';
+    for (const s of data.sources) {
+      html += `<div class="src">
+        <strong>[${s.n}]</strong>
+        <a href="${s.url}" target="_blank" rel="noopener">${s.ticker}</a>
+        <span class="meta">— ${s.company} · ${s.filing_date} · ${escapeHtml(s.section)} · score ${s.score}</span>
+        <div class="snippet">${escapeHtml(s.text.slice(0, 240))}…</div>
+      </div>`;
+    }
+    html += "</div>";
+  }
+  const l = data.latency_ms || {};
+  html += `<div class="latency">retrieval ${l.retrieval_ms ?? "?"} ms · generation ${l.generation_ms ?? "?"} ms · total ${l.total_ms ?? "?"} ms</div>`;
+  $("out").innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("go").addEventListener("click", ask);
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
+document.querySelectorAll(".examples a").forEach((a) =>
+  a.addEventListener("click", () => { $("q").value = a.dataset.q; ask(); }));
+</script>
+</body>
+</html>

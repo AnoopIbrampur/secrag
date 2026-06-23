@@ -1,0 +1,21 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Unit tests cover the data pipeline (extraction, chunking, metadata) and
+      # don't load the embedding model, vector store, or any LLM — so CI skips
+      # the heavy install (torch, chromadb, google-genai).
+      - run: pip install "beautifulsoup4>=4.12" "lxml>=5" requests python-dotenv pytest
+      - run: pip install -e . --no-deps
+      - run: pytest -q
