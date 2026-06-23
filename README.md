@@ -25,29 +25,31 @@ reproducible from `eval/run_eval.py`.
 
 | Metric | Value | Reading |
 |---|---|---|
-| `hit@5` (exact gold chunk) | 0.33 | the exact labeled chunk lands in the top 5 |
-| `soft hit@5` (gold section) | **0.83** | the right filing + section lands in the top 5 |
-| `faithfulness` | **1.00** | answers stay grounded in the retrieved text |
-| `correctness` | 0.33 | answer matches the gold answer |
-| retrieval latency (p50) | **90 ms** | local embeddings, no API round-trip |
-| total latency (p50 / p95) | 1.9 s / 3.0 s | generation dominates |
+| `hit@5` (exact gold chunk) | 0.45 | the exact labeled chunk lands in the top 5 |
+| `soft hit@5` (gold section) | **0.91** | the right filing + section lands in the top 5 |
+| `faithfulness` | **0.82** | answers stay grounded in the retrieved text |
+| `correctness` | **0.73** | answer matches the gold answer |
+| retrieval latency (p50) | **112 ms** | local embeddings, no API round-trip |
+| total latency (p50 / p95) | 2.0 s / 13.9 s | generation dominates; p95 is one slow call |
 
-The gap between `hit@5` (0.33) and `soft hit@5` (0.83) is the interesting part.
-The retriever reliably finds the right section of the right filing; it just
+The gap between `hit@5` (0.45) and `soft hit@5` (0.91) is the interesting part.
+The retriever almost always finds the right section of the right filing; it just
 often returns a neighboring chunk rather than the one exact chunk a question was
-written from, because adjacent chunks in a section overlap and look almost
+written from, because adjacent chunks in a section overlap and look nearly
 identical to the embedder. So `soft hit@5` is the fairer read of retrieval, and
-the clearest lever for lifting answer correctness is chunk granularity (or hybrid
-lexical and dense retrieval) rather than more prompt tuning. Faithfulness sitting
-at 1.00 says the grounding prompt is doing its job: the model answers from the
-retrieved text instead of its own memory.
+answer correctness (0.73) tracks it: when the right section makes the top 5, the
+model usually gets the answer right. Faithfulness at 0.82 means most answers stay
+grounded in the retrieved text, with the occasional claim the judge couldn't tie
+back to a source — the per-question `unsupported_claims` in `results.json` make
+those easy to spot-check. The clearest lever from here is finer chunk granularity
+(or hybrid lexical + dense retrieval) rather than more prompt tuning.
 
-> **On sample size.** The eval ran on n=6 because Google's Gemini free tier
-> caps usage at 20 requests/day/model, and a full pass needs three calls per
-> question (answer + two judges). The harness itself runs at any N: point it at
-> a larger labeled set, or spread the answer/faithfulness/correctness calls
-> across separate models, and it scales. The methodology is the deliverable, and
-> the numbers refresh with one command.
+> **On sample size.** The eval ran on n=11 — 6 of the 17 labeled questions were
+> skipped when a model hit Google's Gemini free-tier cap of 20 requests/day/model
+> (a full pass needs three calls per question, spread across three models). The
+> harness itself runs at any N: point it at a larger labeled set or wire in more
+> models, and it scales. The methodology is the deliverable, and the numbers
+> refresh with one command.
 
 ## How it works
 
