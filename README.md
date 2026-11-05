@@ -7,6 +7,11 @@
 A question-answering system over real SEC 10-K filings that cites its sources and
 ships with an evaluation harness I can defend line by line.
 
+**[Try the search demo →](https://anoopibrampur.github.io/secrag/)** Retrieval over all six
+filings, running in your browser with the same embedding model, next to the stored answers
+and scores from the latest eval run. Generation needs a Gemini key, so the demo doesn't
+generate new answers.
+
 Most RAG demos stop at "look, it answers questions." The part that matters in
 production is whether retrieval finds the right passage and whether the answer is
 grounded in it, so this repo measures both. Ask a
@@ -147,6 +152,15 @@ why each question already knows its gold chunk for retrieval scoring.
   judgments can be spot-checked.
 - **Demo corpus.** Six filings here; scaling to thousands is more tickers through
   `ingest` (respecting EDGAR's ~10 req/s limit).
+
+## Demo site
+
+`python -m secrag.site` exports the built index to `site/`: chunk text and citation
+metadata in `chunks.json`, embeddings as int8 in `vectors.bin` (same top-5 as full
+precision 97% of the time on 200 sampled queries), and the latest `eval/results.json`
+in `meta.json`. `site/index.html` embeds the query in the browser with transformers.js
+and ranks by dot product, falling back to keyword matching if the model can't load.
+`.github/workflows/pages.yml` publishes `site/` to GitHub Pages.
 
 ## License
 

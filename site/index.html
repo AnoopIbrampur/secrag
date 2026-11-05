@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>secrag 10-K Search</title>
+<meta name="description" content="Semantic search over six SEC 10-K filings, running entirely in your browser, with the evaluation numbers and answers from secrag's latest eval run.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+/* Layout: one 1000px column. Search first (the demo), eval numbers beside it, then results as
+   citation cards. Passages are set in a reading serif; metadata in mono, like a filing index. */
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --fg:#17191c; --muted:#5d636b; --faint:#8a9097; --hair:rgba(18,22,28,.1);
+  --accent:#0f6b52; --accent-soft:rgba(15,107,82,.09); --good:#1f7a3d; --good-soft:rgba(31,122,61,.1);
+  --bad:#b42318; --bad-soft:rgba(180,35,24,.09); --mark:rgba(15,107,82,.14); --bar:#dfe2e0;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --serif:"Newsreader","Iowan Old Style",Georgia,serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d0f10; --surface:#16191b; --fg:#eceeed; --muted:#a2a8ae; --faint:#7c8389; --hair:rgba(255,255,255,.1);
+  --accent:#4cc9a0; --accent-soft:rgba(76,201,160,.12); --good:#4ade80; --good-soft:rgba(74,222,128,.12);
+  --bad:#f87171; --bad-soft:rgba(248,113,113,.13); --mark:rgba(76,201,160,.2); --bar:#2c3134; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d0f10; --surface:#16191b; --fg:#eceeed; --muted:#a2a8ae; --faint:#7c8389; --hair:rgba(255,255,255,.1);
+  --accent:#4cc9a0; --accent-soft:rgba(76,201,160,.12); --good:#4ade80; --good-soft:rgba(74,222,128,.12);
+  --bad:#f87171; --bad-soft:rgba(248,113,113,.13); --mark:rgba(76,201,160,.2); --bar:#2c3134; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1000px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.kicker{font:500 .7rem/1.4 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--faint);margin:0}
+.num{font-variant-numeric:tabular-nums}
+
+header{padding-block:48px 4px}
+header .kicker{color:var(--accent)}
+h1{font:400 clamp(2.2rem,5vw,3.2rem)/1.05 var(--serif);letter-spacing:-.02em;margin:10px 0 12px;text-wrap:balance}
+.lede{color:var(--muted);max-width:66ch;margin:0}
+.toplinks{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:.92rem}
+
+.searchbox{margin-top:28px;background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:16px}
+form{display:flex;gap:8px}
+#q{flex:1;min-width:0;font:inherit;font-size:1.02rem;padding:11px 14px;border-radius:10px;border:1px solid var(--hair);background:var(--bg);color:var(--fg)}
+button{font:500 .92rem var(--sans);cursor:pointer;border-radius:10px;border:0;transition:transform 100ms ease-out}
+button:active{transform:scale(.97)}
+.go{background:var(--accent);color:#fff;padding:0 18px}
+:root:not([data-theme="light"]) .go{color:var(--bg)}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .go{color:#fff}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.chip{background:transparent;border:1px solid var(--hair);color:var(--muted);padding:5px 11px;font-size:.8rem;border-radius:999px}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.status{font-size:.82rem;color:var(--faint);margin:10px 2px 0;min-height:1.3em}
+.status.err{color:var(--bad)}
+
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--hair);border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin-top:16px}
+.stat{background:var(--surface);padding:14px 16px;min-width:0}
+.stat b{display:block;font-size:1.45rem;letter-spacing:-.03em;line-height:1.15}
+.stat span{font-size:.78rem;color:var(--muted)}
+@media (max-width:760px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat:last-child{grid-column:1/-1}}
+.statnote{font-size:.8rem;color:var(--faint);margin:8px 2px 0}
+
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;margin-top:28px;align-items:start}
+@media (max-width:860px){.cols{grid-template-columns:1fr}}
+.results{display:flex;flex-direction:column;gap:12px;min-width:0}
+.empty{color:var(--muted);background:var(--surface);border:1px dashed var(--hair);border-radius:14px;padding:22px}
+.answer{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:18px}
+.answer p{margin:6px 0 0}
+.answer .a{font:400 1.08rem/1.5 var(--serif)}
+.answer .gold{color:var(--muted);font-size:.88rem}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.badge{font-size:.74rem;padding:2px 9px;border-radius:999px;background:var(--bar);color:var(--muted)}
+.badge.good{background:var(--good-soft);color:var(--good)}
+.badge.bad{background:var(--bad-soft);color:var(--bad)}
+.hit{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:16px 18px;min-width:0}
+.hit.gold{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.hit-top{display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+.cite{font:600 .74rem var(--mono);color:var(--accent);letter-spacing:.02em}
+.src{font-size:.86rem;font-weight:600}
+.sec{font-size:.8rem;color:var(--muted)}
+.score{font:.74rem var(--mono);color:var(--faint);white-space:nowrap}
+.scorebar{display:inline-block;width:46px;height:5px;border-radius:3px;background:var(--bar);vertical-align:middle;margin-right:6px;overflow:hidden}
+.scorebar i{display:block;height:100%;background:var(--accent)}
+.passage{font:400 1rem/1.55 var(--serif);margin:10px 0 0;overflow-wrap:anywhere;white-space:pre-line}
+.passage mark{background:var(--mark);color:inherit;border-radius:2px;padding:0 1px}
+.more{background:none;color:var(--accent);padding:0;font-size:.82rem;margin-top:6px}
+.hit-foot{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:.8rem}
+
+aside{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--surface);border:1px solid var(--hair);border-radius:14px;padding:16px}
+.panel h2{font-size:.98rem;margin:6px 0 4px;letter-spacing:-.01em}
+.panel p{margin:0;font-size:.84rem;color:var(--muted)}
+.qlist{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column}
+.qlist li+li{border-top:1px solid var(--hair)}
+.qlist button{display:block;width:100%;text-align:left;background:none;color:var(--fg);padding:9px 0;font-size:.84rem;line-height:1.4;border-radius:0}
+.qlist button:hover{color:var(--accent)}
+.qlist .tick{font:.72rem var(--mono);color:var(--faint);display:block;margin-top:2px}
+.filings{list-style:none;margin:10px 0 0;padding:0;font-size:.84rem;display:flex;flex-direction:column;gap:6px}
+footer{padding-block:40px 56px;color:var(--faint);font-size:.82rem}
+footer p{margin:0 0 6px;max-width:80ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">secrag · SEC 10-K retrieval</p>
+    <h1>Search six 10-K filings, with citations</h1>
+    <p class="lede">Ask in plain English. Your question is embedded in this browser with the same model the index was built with (bge-small), then matched against 3,340 passages from Apple, Amazon, JPMorgan, Microsoft, NVIDIA and Exxon. Every result links to its filing and section.</p>
+    <div class="toplinks">
+      <a href="https://github.com/AnoopIbrampur/secrag">Code</a>
+      <a href="https://github.com/AnoopIbrampur/secrag#evaluation">How it's evaluated</a>
+    </div>
+  </header>
+
+  <div class="searchbox">
+    <form id="form">
+      <input id="q" type="search" placeholder="What are NVIDIA's main competitive risks?" aria-label="Ask a question about the filings" autocomplete="off">
+      <button class="go" type="submit">Search</button>
+    </form>
+    <div class="chips" id="chips" role="group" aria-label="Limit to one company"></div>
+    <p class="status" id="status" aria-live="polite"></p>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <p class="statnote" id="statnote"></p>
+
+  <div class="cols">
+    <main class="results" id="results">
+      <div class="empty">Try a question, or pick one from the eval set on the right to see the stored answer next to what retrieval finds. The first search downloads the embedding model (about 34 MB), once.</div>
+    </main>
+    <aside>
+      <div class="panel">
+        <p class="kicker">From the eval set</p>
+        <h2>Questions with stored answers</h2>
+        <p>Answers come from the latest eval run. Generation uses Gemini, so this page doesn't generate new ones.</p>
+        <ul class="qlist" id="qlist"></ul>
+      </div>
+      <div class="panel">
+        <p class="kicker">Corpus</p>
+        <ul class="filings" id="filings"></ul>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <p id="built"></p>
+    <p>Retrieval runs locally in your browser; nothing you type leaves the page except the one-time model download from Hugging Face. Vectors are stored as 8-bit integers, which returns the same top-5 passages as full precision 97% of the time in a check on 200 queries.</p>
+  </footer>
+</div>
+
+<script type="module">
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = x => x == null ? "–" : Math.round(x * 100) + "%";
+const TOP_K = 5;
+const MODEL = "Xenova/bge-small-en-v1.5";
+let META, CHUNKS, VEC, extractor = null, loading = null, only = null, activeQ = null;
+const status = (t, err) => { const el = $("#status"); el.textContent = t; el.classList.toggle("err", !!err); };
+
+async function loadIndex() {
+  const [m, c, v] = await Promise.all([
+    fetch("meta.json").then(r => r.json()),
+    fetch("chunks.json").then(r => r.json()),
+    fetch("vectors.bin").then(r => r.arrayBuffer()),
+  ]);
+  META = m; CHUNKS = c; VEC = new Int8Array(v);
+}
+
+async function model() {
+  if (extractor) return extractor;
+  if (!loading) loading = (async () => {
+    status("Loading the embedding model (about 34 MB, once)…");
+    const { pipeline, env } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6");
+    env.allowLocalModels = false;
+    extractor = await pipeline("feature-extraction", MODEL, { dtype: "q8" });
+    return extractor;
+  })();
+  return loading;
+}
+
+async function embed(text) {
+  const ex = await model();
+  const out = await ex(META.query_instruction + text, { pooling: "cls", normalize: true });
+  return out.data;
+}
+
+function rank(q) {
+  const d = META.dim, k = META.scale / 127, n = CHUNKS.length, scores = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0; const o = i * d;
+    for (let j = 0; j < d; j++) s += q[j] * VEC[o + j];
+    scores[i] = s * k;
+  }
+  const idx = [];
+  for (let i = 0; i < n; i++) if (!only || CHUNKS[i].f.startsWith(only + "_")) idx.push(i);
+  idx.sort((a, b) => scores[b] - scores[a]);
+  return idx.slice(0, TOP_K).map(i => ({ i, score: scores[i] }));
+}
+
+// Used only if the model can't load (offline, blocked CDN): plain term overlap.
+function keywordRank(text) {
+  const terms = [...new Set(text.toLowerCase().match(/[a-z0-9]{3,}/g) || [])];
+  const out = [];
+  CHUNKS.forEach((c, i) => {
+    if (only && !c.f.startsWith(only + "_")) return;
+    const t = c.t.toLowerCase(); let s = 0;
+    for (const w of terms) { const m = t.split(w).length - 1; if (m) s += 1 + Math.log(m); }
+    if (s) out.push({ i, score: s / (terms.length || 1) });
+  });
+  return out.sort((a, b) => b.score - a.score).slice(0, TOP_K);
+}
+
+function highlight(text, query) {
+  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9]{4,}/g) || []))].filter(w => !["what","does","with","from","their","which","have","that","this","about"].includes(w));
+  let h = esc(text);
+  for (const w of terms) h = h.replace(new RegExp(`\\b(${w}\\w*)`, "gi"), "<mark>$1</mark>");
+  return h;
+}
+
+function filing(key) { return META.filings.find(f => `${f.ticker}_${f.filing_date}` === key); }
+
+function render(hits, query, mode, q) {
+  const gold = new Set(q ? q.gold_chunk_ids : []);
+  const answer = q ? `<div class="answer">
+      <p class="kicker">Stored answer from the eval run</p>
+      <p class="a">${esc(q.answer || "No answer stored.")}</p>
+      ${q.gold_answer ? `<p class="gold"><b>Gold answer:</b> ${esc(q.gold_answer)}</p>` : ""}
+      <div class="badges">
+        <span class="badge ${q.retrieval.soft_hit ? "good" : "bad"}">${q.retrieval.soft_hit ? "Right section in top 5" : "Right section missed"}</span>
+        <span class="badge ${q.retrieval.hit ? "good" : ""}">${q.retrieval.hit ? "Exact gold passage in top 5" : "Neighbouring passage, not the exact one"}</span>
+        <span class="badge ${q.faithful ? "good" : "bad"}">${q.faithful ? "Faithful to sources" : "Judge found an unsupported claim"}</span>
+        <span class="badge ${q.correct ? "good" : "bad"}">${q.correct ? "Matches gold answer" : "Doesn't match gold answer"}</span>
+      </div>
+      ${q.unsupported_claims?.length ? `<p class="gold" style="margin-top:8px"><b>Unsupported:</b> ${esc(q.unsupported_claims.join(" "))}</p>` : ""}
+    </div>` : "";
+  const cards = hits.map((h, n) => {
+    const c = CHUNKS[h.i], f = filing(c.f), isGold = gold.has(c.id);
+    const long = c.t.length > 520;
+    const bar = mode === "semantic" ? `<span class="scorebar"><i style="width:${Math.max(0, Math.min(1, (h.score - .3) / .5)) * 100}%"></i></span>${h.score.toFixed(3)}` : "keyword match";
+    return `<article class="hit${isGold ? " gold" : ""}">
+      <div class="hit-top"><div><span class="cite">[${n + 1}]</span> <span class="src">${esc(f.company)}</span> <span class="sec">· ${esc(c.s)}</span></div>
+        <span class="score">${bar}</span></div>
+      <p class="passage" data-full="${long ? "0" : "1"}">${highlight(long ? c.t.slice(0, 520).replace(/\s\S*$/, "") + "…" : c.t, query)}</p>
+      ${long ? `<button class="more" data-i="${h.i}">Show the full passage</button>` : ""}
+      <div class="hit-foot"><span class="sec">${esc(f.form)} filed ${esc(f.filing_date)}</span><a href="${esc(f.url)}" target="_blank" rel="noopener">Open filing on SEC.gov ↗</a>${isGold ? `<span class="badge good">Gold passage for this question</span>` : ""}</div>
+    </article>`;
+  }).join("");
+  $("#results").innerHTML = answer + (cards || `<div class="empty">No passages matched. Try different wording or remove the company filter.</div>`);
+  $("#results").dataset.query = query;
+}
+
+async function search(text, q = null) {
+  text = text.trim(); if (!text) return;
+  activeQ = q;
+  const t0 = performance.now();
+  try {
+    const vec = await embed(text);
+    const t1 = performance.now();
+    const hits = rank(vec);
+    status(`Top ${hits.length} of ${CHUNKS.length.toLocaleString()} passages${only ? ` from ${only}` : ""} · embedded in ${Math.round(t1 - t0)} ms, ranked in ${Math.round(performance.now() - t1)} ms`);
+    render(hits, text, "semantic", q);
+  } catch (e) {
+    console.error(e);
+    const hits = keywordRank(text);
+    status("The embedding model couldn't load here, so these are keyword matches instead of semantic search.", true);
+    render(hits, text, "keyword", q);
+  }
+}
+
+function renderChrome() {
+  const S = META.eval?.summary;
+  if (S) {
+    const r = S.retrieval || {};
+    $("#stats").innerHTML = [
+      [pct(r.soft_hit), "right filing section in top 5"], [pct(r.hit), "exact gold passage in top 5"],
+      [pct(S.faithfulness), "answers faithful to sources"], [pct(S.correctness), "answers match gold"],
+      [`${Math.round(S.latency_ms?.retrieval_p50 ?? 0)} ms`, "retrieval, p50"],
+    ].map(([v, l]) => `<div class="stat"><b class="num">${v}</b><span>${l}</span></div>`).join("");
+    $("#statnote").textContent = `Latest eval run, ${S.n_questions} labeled questions, k=${S.k}. Faithfulness and correctness are judged by an LLM. Small sample: see the repo for the method and its limits.`;
+  }
+  $("#chips").innerHTML = [`<button type="button" class="chip" data-t="" aria-pressed="true">All six</button>`,
+    ...META.filings.map(f => `<button type="button" class="chip" data-t="${esc(f.ticker)}" aria-pressed="false">${esc(f.ticker)}</button>`)].join("");
+  $("#filings").innerHTML = META.filings.map(f => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.company)}</a> <span class="sec">${esc(f.form)} · ${esc(f.filing_date)}</span></li>`).join("");
+  $("#qlist").innerHTML = (META.eval?.questions || []).map((q, i) =>
+    `<li><button type="button" data-q="${i}">${esc(q.question)}<span class="tick">${esc(q.gold_ticker || "")} · ${q.correct ? "answer matched gold" : "answer missed gold"}</span></button></li>`).join("");
+  $("#built").textContent = `${META.count.toLocaleString()} passages, ${META.dim}-dim ${META.model} embeddings. Exported ${new Date(META.built_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}.`;
+}
+
+$("#form").addEventListener("submit", e => { e.preventDefault(); search($("#q").value); });
+$("#chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  only = b.dataset.t || null;
+  document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b));
+  if ($("#q").value.trim()) search($("#q").value, activeQ);
+});
+$("#qlist").addEventListener("click", e => {
+  const b = e.target.closest("button[data-q]"); if (!b) return;
+  const q = META.eval.questions[+b.dataset.q];
+  $("#q").value = q.question; search(q.question, q);
+  $("#results").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+});
+$("#results").addEventListener("click", e => {
+  const b = e.target.closest(".more"); if (!b) return;
+  const p = b.previousElementSibling, c = CHUNKS[+b.dataset.i];
+  p.innerHTML = highlight(c.t, $("#results").dataset.query || ""); b.remove();
+});
+
+try {
+  await loadIndex();
+  renderChrome();
+  model().then(() => { if (!$("#status").classList.contains("err") && $("#status").textContent.startsWith("Loading")) status("Model ready. Ask anything about the six filings."); })
+         .catch(() => status("The embedding model couldn't load here; searches will fall back to keyword matching.", true));
+} catch (e) {
+  console.error(e);
+  status("Couldn't load the index. Refresh to try again.", true);
+}
+</script>
+</body>
+</html>
