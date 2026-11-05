@@ -39,9 +39,10 @@ def _gen_config(system: str, max_tokens: int, model: str, temperature: float,
         "max_output_tokens": max_tokens,
         "temperature": temperature,
     }
-    # 2.5 models "think" by default, which can eat the whole token budget and
-    # return empty text. We don't need it for grounded extraction/judging.
-    if model.startswith("gemini-2.5"):
+    # 2.5-era flash models "think" by default, which can eat the whole token
+    # budget and return empty text. We don't need it for grounded extraction or
+    # judging. The "*-latest" aliases also point at 2.5-era models.
+    if model.startswith("gemini-2.5") or "latest" in model:
         kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     if schema is not None:
         kwargs["response_mime_type"] = "application/json"
